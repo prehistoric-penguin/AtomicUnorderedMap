@@ -60,12 +60,8 @@
 #include <limits>
 #include <type_traits>
 
-#include <folly/ConstexprMath.h>
-#include <folly/Portability.h>
-#include <folly/Traits.h>
-#include <folly/Utility.h>
-#include <folly/lang/Assume.h>
-#include <folly/portability/Builtins.h>
+template <std::size_t I>
+using index_constant = std::integral_constant<std::size_t, I>;
 
 #if __has_include(<bit>)
 #include <bit>
@@ -80,6 +76,7 @@ using std::bit_cast;
 #else
 
 //  mimic: std::bit_cast, C++20
+/*
 template <
     typename To,
     typename From,
@@ -92,8 +89,24 @@ To bit_cast(const From& src) noexcept {
   std::memcpy(&storage, &src, sizeof(From));
   return reinterpret_cast<To&>(storage);
 }
+*/
 
 #endif
+template <typename T>
+constexpr T constexpr_max(T a) {
+  return a;
+}
+template <typename T, typename... Ts>
+constexpr T constexpr_max(T a, T b, Ts... ts) {
+  return b < a ? constexpr_max(a, ts...) : constexpr_max(b, ts...);
+}
+
+template <typename Int>
+constexpr typename std::make_unsigned<Int>::type to_unsigned(Int value) {
+  assert(value >= 0 && "negative value");
+  return static_cast<typename std::make_unsigned<Int>::type>(value);
+}
+
 
 namespace detail {
 template <typename Dst, typename Src>
@@ -130,6 +143,27 @@ inline constexpr unsigned int findFirstSet(T const v) {
       0);
   // clang-format on
 }
+// When a and b are equivalent objects, we return a to
+// make sorting stable.
+template <typename T>
+constexpr T constexpr_min(T a) {
+  return a;
+}
+template <typename T, typename... Ts>
+constexpr T constexpr_min(T a, T b, Ts... ts) {
+  return b < a ? constexpr_min(b, ts...) : constexpr_min(a, ts...);
+}
+template <typename Dst, typename Src>
+constexpr std::make_signed_t<Dst> bits_to_signed(Src const s) {
+  static_assert(std::is_signed<Dst>::value, "unsigned type");
+  return to_signed(static_cast<std::make_unsigned_t<Dst>>(to_unsigned(s)));
+}
+template <typename Dst, typename Src>
+constexpr std::make_unsigned_t<Dst> bits_to_unsigned(Src const s) {
+  static_assert(std::is_unsigned<Dst>::value, "signed type");
+  return static_cast<Dst>(to_unsigned(s));
+}
+
 
 /// findLastSet
 ///
@@ -221,75 +255,6 @@ template <class T>
 inline constexpr T strictPrevPowTwo(T const v) {
   static_assert(std::is_unsigned<T>::value, "signed type");
   return v > 1 ? prevPowTwo(T(v - 1)) : T(0);
-}
-
-
-
-/**
- * Read l bytes into the low bits of a value of an unsigned integral
- * type T, where l < sizeof(T).
- *
- * This is intended as a complement to loadUnaligned to read the tail
- * of a buffer when it is processed one word at a time.
- */
-template <class T>
-inline T partialLoadUnaligned(const void* p, size_t l) {
-  static_assert(
-      std::is_integral<T>::value && std::is_unsigned<T>::value &&
-          sizeof(T) <= 8,
-      "Invalid type");
-  assume(l < sizeof(T));
-
-  auto cp = static_cast<const char*>(p);
-  T value = 0;
-  if (!kHasUnalignedAccess || !kIsLittleEndian) {
-    // Unsupported, use memcpy.
-    memcpy(&value, cp, l);
-    return value;
-  }
-
-  auto avail = l;
-  if (l & 4) {
-    avail -= 4;
-    value = static_cast<T>(loadUnaligned<uint32_t>(cp + avail)) << (avail * 8);
-  }
-  if (l & 2) {
-    avail -= 2;
-    value |= static_cast<T>(loadUnaligned<uint16_t>(cp + avail)) << (avail * 8);
-  }
-  if (l & 1) {
-    value |= loadUnaligned<uint8_t>(cp);
-  }
-  return value;
-}
-
-/**
- * Write an unaligned value of type T.
- */
-template <class T>
-inline void storeUnaligned(void* p, T value) {
-  static_assert(sizeof(Unaligned<T>) == sizeof(T), "Invalid unaligned size");
-  static_assert(alignof(Unaligned<T>) == 1, "Invalid alignment");
-  if (kHasUnalignedAccess) {
-    // Prior to C++14, the spec says that a placement new like this
-    // is required to check that p is not nullptr, and to do nothing
-    // if p is a nullptr. By assuming it's not a nullptr, we get a
-    // nice loud segfault in optimized builds if p is nullptr, rather
-    // than just silently doing nothing.
-    assume(p != nullptr);
-    new (p) Unaligned<T>(value);
-  } else {
-    memcpy(p, &value, sizeof(T));
-  }
-}
-
-template <typename T>
-T bitReverse(T n) {
-  auto m = static_cast<typename std::make_unsigned<T>::type>(n);
-  m = ((m & 0xAAAAAAAAAAAAAAAA) >> 1) | ((m & 0x5555555555555555) << 1);
-  m = ((m & 0xCCCCCCCCCCCCCCCC) >> 2) | ((m & 0x3333333333333333) << 2);
-  m = ((m & 0xF0F0F0F0F0F0F0F0) >> 4) | ((m & 0x0F0F0F0F0F0F0F0F) << 4);
-  return static_cast<T>(Endian::swap(m));
 }
 
 } // namespace folly

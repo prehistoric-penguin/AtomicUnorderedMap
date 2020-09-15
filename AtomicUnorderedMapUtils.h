@@ -21,8 +21,10 @@
 #include <cstdint>
 #include <system_error>
 
-#include <folly/portability/SysMman.h>
-#include <folly/portability/Unistd.h>
+//#include <folly/portability/SysMman.h>
+//#include <folly/portability/Unistd.h>
+#include <sys/mman.h>
+#include <sys/unistd.h>
 
 namespace folly {
 namespace detail {

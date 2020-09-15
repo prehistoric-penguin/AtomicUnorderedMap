@@ -23,16 +23,24 @@
 #include <stdexcept>
 #include <system_error>
 #include <type_traits>
+#include <cstring>
 
-#include <folly/Conv.h>
-#include <folly/Likely.h>
-#include <folly/Random.h>
-#include <folly/Traits.h>
-#include <folly/detail/AtomicUnorderedMapUtils.h>
-#include <folly/lang/Bits.h>
-#include <folly/portability/SysMman.h>
-#include <folly/portability/Unistd.h>
-
+//#include <folly/Conv.h>
+//#include <folly/Likely.h>
+//#include <folly/Random.h>
+//#include <folly/Traits.h>
+#include "AtomicUnorderedMapUtils.h"
+#include "Bits.h"
+//#include <folly/lang/Bits.h>
+//#include <folly/portability/SysMman.h>
+//#include <folly/portability/Unistd.h>
+#if defined(__GNUC__)
+#define LIKELY(x) (__builtin_expect((x), 1))
+#define UNLIKELY(x) (__builtin_expect((x), 0))
+#else
+#define LIKELY(x) (x)
+#define UNLIKELY(x) (x)
+#endif
 namespace folly {
 
 /// You're probably reading this because you are looking for an
@@ -361,7 +369,8 @@ struct AtomicUnorderedInsertMap {
     IndexType next_;
 
     /// Key and Value
-    aligned_storage_for_t<value_type> raw_;
+    //aligned_storage_for_t<value_type> raw_;
+    std::aligned_storage<sizeof(value_type), alignof(value_type)> raw_;
 
     ~Slot() {
       auto s = state();
@@ -449,9 +458,11 @@ struct AtomicUnorderedInsertMap {
     } else {
       IndexType rv;
       if (sizeof(IndexType) <= 4) {
-        rv = IndexType(folly::Random::rand32(numSlots_));
+        rv = IndexType(random() % numSlots_);
+        //rv = IndexType(folly::Random::rand32(numSlots_));
       } else {
-        rv = IndexType(folly::Random::rand64(numSlots_));
+        rv = IndexType(random() % numSlots_);
+        //rv = IndexType(folly::Random::rand64(numSlots_));
       }
       assert(rv < numSlots_);
       return rv;
