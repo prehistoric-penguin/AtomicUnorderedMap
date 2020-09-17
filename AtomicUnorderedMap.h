@@ -459,6 +459,7 @@ struct AtomicUnorderedInsertMap {
       return IndexType(start + tries);
     } else {
       IndexType rv;
+      // TODO thread local random
       if (sizeof(IndexType) <= 4) {
         rv = IndexType(random() % numSlots_);
         //rv = IndexType(folly::Random::rand32(numSlots_));
