@@ -42,6 +42,9 @@
 #define UNLIKELY(x) (x)
 #endif
 namespace folly {
+template <typename T>
+using aligned_storage_for_t =
+    typename std::aligned_storage<sizeof(T), alignof(T)>::type;
 
 /// You're probably reading this because you are looking for an
 /// AtomicUnorderedMap<K,V> that is fully general, highly concurrent (for
@@ -369,8 +372,7 @@ struct AtomicUnorderedInsertMap {
     IndexType next_;
 
     /// Key and Value
-    //aligned_storage_for_t<value_type> raw_;
-    std::aligned_storage<sizeof(value_type), alignof(value_type)> raw_;
+    aligned_storage_for_t<value_type> raw_;
 
     ~Slot() {
       auto s = state();
