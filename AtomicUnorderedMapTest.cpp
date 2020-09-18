@@ -135,6 +135,7 @@ TYPED_TEST(AtomicUnorderedInsertMapTest, basic) {
 
 TEST(AtomicUnorderedInsertMap, load_factor) {
   AtomicUnorderedInsertMap<int, bool> m(5000, 0.5f);
+  EXPECT_GT(m.SlotsNum(), 5000);
 
   // we should be able to put in much more than 5000 things because of
   // our load factor request

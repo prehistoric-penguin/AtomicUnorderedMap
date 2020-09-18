@@ -239,6 +239,8 @@ struct AtomicUnorderedInsertMap {
     slots_[0].stateUpdate(EMPTY, CONSTRUCTING);
   }
 
+  size_t SlotsNum() const { return numSlots_; }
+
   ~AtomicUnorderedInsertMap() {
     if (!SkipKeyValueDeletion) {
       for (size_t i = 1; i < numSlots_; ++i) {
