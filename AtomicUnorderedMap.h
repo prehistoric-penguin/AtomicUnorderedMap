@@ -240,6 +240,7 @@ struct AtomicUnorderedInsertMap {
   }
 
   size_t SlotsNum() const { return numSlots_; }
+  size_t MemoryCost() const { return mmapRequested_; }
 
   ~AtomicUnorderedInsertMap() {
     if (!SkipKeyValueDeletion) {
