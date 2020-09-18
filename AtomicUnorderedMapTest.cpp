@@ -289,6 +289,9 @@ TEST(UnorderedInsertMap, value_mutation) {
     m.emplace(i, i);
   }
 
+  auto itr = m.find(1);
+  EXPECT_NE(itr.get_internal_slot(), 0);
+
   m.find(1)->second.data++;
   EXPECT_EQ(m.find(1)->second.data, 2);
 

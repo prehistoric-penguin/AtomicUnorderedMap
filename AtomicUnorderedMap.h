@@ -178,6 +178,10 @@ struct AtomicUnorderedInsertMap {
       return &owner_.slots_[slot_].keyValue();
     }
 
+    const IndexType get_internal_slot() const {
+      return slot_;
+    }
+
     // pre-increment
     const ConstIterator &operator++() {
       while (slot_ > 0) {
