@@ -265,7 +265,7 @@ TEST(UnorderedInsertMap, memory_occupy) {
   Frame f1;
   f1.frame[0] = 0x1;
   f1.frame[1] = 0x2;
-
+  typename folly::AtomicUnorderedInsertMap<Frame, MutableData<Counter>, FrameHash>::IndexType_t a;
   Counter c1;
   m.emplace(f1, c1);
 

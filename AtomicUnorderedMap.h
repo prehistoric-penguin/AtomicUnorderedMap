@@ -161,6 +161,7 @@ struct AtomicUnorderedInsertMap {
   typedef Hash hasher;
   typedef KeyEqual key_equal;
   typedef const value_type &const_reference;
+  typedef IndexType IndexType_t;
 
   typedef struct ConstIterator {
     ConstIterator(const AtomicUnorderedInsertMap &owner, IndexType slot)
