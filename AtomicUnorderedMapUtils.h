@@ -40,7 +40,7 @@ class MMapAlloc {
   }
 
  public:
-  void* allocate(size_t size) {
+  void *allocate(size_t size) {
     auto len = computeSize(size);
 
     int extraflags = 0;
@@ -49,14 +49,10 @@ class MMapAlloc {
 #endif
     // MAP_HUGETLB is a perf win, but requires cooperation from the
     // deployment environment (and a change to computeSize()).
-    void* mem = static_cast<void*>(mmap(
-        nullptr,
-        len,
-        PROT_READ | PROT_WRITE,
-        MAP_PRIVATE | MAP_ANONYMOUS | extraflags,
-        -1,
-        0));
-    if (mem == reinterpret_cast<void*>(-1)) {
+    void *mem = static_cast<void *>(
+        mmap(nullptr, len, PROT_READ | PROT_WRITE,
+             MAP_PRIVATE | MAP_ANONYMOUS | extraflags, -1, 0));
+    if (mem == reinterpret_cast<void *>(-1)) {
       throw std::system_error(errno, std::system_category());
     }
 #if !defined(MAP_POPULATE) && defined(MADV_WILLNEED)
@@ -66,7 +62,7 @@ class MMapAlloc {
     return mem;
   }
 
-  void deallocate(void* p, size_t size) {
+  void deallocate(void *p, size_t size) {
     auto len = computeSize(size);
     munmap(p, len);
   }
@@ -78,5 +74,5 @@ struct GivesZeroFilledMemory : public std::false_type {};
 template <>
 struct GivesZeroFilledMemory<MMapAlloc> : public std::true_type {};
 
-} // namespace detail
-} // namespace folly
+}  // namespace detail
+}  // namespace folly

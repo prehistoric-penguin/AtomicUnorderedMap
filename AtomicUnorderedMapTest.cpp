@@ -14,20 +14,25 @@
  * limitations under the License.
  */
 
-#include "AtomicUnorderedMap.h"
+#include <gtest/gtest.h>
+#include <unistd.h>
 
+#include <fstream>
+#include <ios>
+#include <iostream>
 #include <memory>
+#include <string>
 #include <thread>
 #include <unordered_map>
-#include <gtest/gtest.h>
 
+#include "AtomicUnorderedMap.h"
 
 template <class T>
 struct non_atomic {
   T value;
 
   non_atomic() = default;
-  non_atomic(const non_atomic&) = delete;
+  non_atomic(const non_atomic &) = delete;
   constexpr /* implicit */ non_atomic(T desired) : value(desired) {}
 
   T operator+=(T arg) {
@@ -40,27 +45,22 @@ struct non_atomic {
   }
 
   /* implicit */
-  operator T() const {
-    return load();
-  }
+  operator T() const { return load(); }
 
-  void store(
-      T desired,
-      std::memory_order /* order */ = std::memory_order_seq_cst) {
+  void store(T desired,
+             std::memory_order /* order */ = std::memory_order_seq_cst) {
     value = desired;
   }
 
-  T exchange(
-      T desired,
-      std::memory_order /* order */ = std::memory_order_seq_cst) {
+  T exchange(T desired,
+             std::memory_order /* order */ = std::memory_order_seq_cst) {
     T old = load();
     store(desired);
     return old;
   }
 
   bool compare_exchange_weak(
-      T& expected,
-      T desired,
+      T &expected, T desired,
       std::memory_order /* success */ = std::memory_order_seq_cst,
       std::memory_order /* failure */ = std::memory_order_seq_cst) {
     if (value == expected) {
@@ -73,8 +73,7 @@ struct non_atomic {
   }
 
   bool compare_exchange_strong(
-      T& expected,
-      T desired,
+      T &expected, T desired,
       std::memory_order /* success */ = std::memory_order_seq_cst,
       std::memory_order /* failure */ = std::memory_order_seq_cst) {
     if (value == expected) {
@@ -86,33 +85,23 @@ struct non_atomic {
     return false;
   }
 
-  bool is_lock_free() const {
-    return true;
-  }
+  bool is_lock_free() const { return true; }
 };
 using namespace folly;
 
-template <
-    typename Key,
-    typename Value,
-    typename IndexType,
-    template <typename> class Atom = std::atomic,
-    typename Allocator = std::allocator<char>>
-using UIM = AtomicUnorderedInsertMap<
-    Key,
-    Value,
-    std::hash<Key>,
-    std::equal_to<Key>,
-    (std::is_trivially_destructible<Key>::value &&
-     std::is_trivially_destructible<Value>::value),
-    Atom,
-    IndexType,
-    Allocator>;
+template <typename Key, typename Value, typename IndexType,
+          template <typename> class Atom = std::atomic,
+          typename Allocator = std::allocator<char>>
+using UIM =
+    AtomicUnorderedInsertMap<Key, Value, std::hash<Key>, std::equal_to<Key>,
+                             (std::is_trivially_destructible<Key>::value &&
+                              std::is_trivially_destructible<Value>::value),
+                             Atom, IndexType, Allocator>;
 
 namespace {
 template <typename T>
 struct AtomicUnorderedInsertMapTest : public ::testing::Test {};
-} // namespace
+}  // namespace
 
 // uint16_t doesn't make sense for most platforms, but we might as well
 // test it
@@ -120,10 +109,7 @@ using IndexTypesToTest = ::testing::Types<uint16_t, uint32_t, uint64_t>;
 TYPED_TEST_CASE(AtomicUnorderedInsertMapTest, IndexTypesToTest);
 
 TYPED_TEST(AtomicUnorderedInsertMapTest, basic) {
-  UIM<std::string,
-      std::string,
-      TypeParam,
-      std::atomic,
+  UIM<std::string, std::string, TypeParam, std::atomic,
       folly::detail::MMapAlloc>
       m(100);
 
@@ -179,6 +165,115 @@ TYPED_TEST(AtomicUnorderedInsertMapTest, value_mutation) {
   m.find(1)->second.data++;
 }
 
+TEST(UnorderedInsertMap, struct_value) {
+  UIM<int, MutableData<std::pair<int, int>>, uint32_t, non_atomic> m(100000);
+
+  for (int i = 0; i < 50; ++i) {
+    m.emplace(i, std::make_pair(i, i));
+  }
+  auto it = m.find(48);
+  auto it2 = m.find(49);
+
+  for (int i = 50; i < 1000; ++i) {
+    m.emplace(i, std::make_pair(i, i));
+  }
+
+  m.find(1)->second.data.first++;
+  EXPECT_EQ(m.find(1)->second.data.first, 2);
+  EXPECT_EQ(it->second.data.first, 48);
+  EXPECT_EQ(it2->second.data.first, 49);
+
+  m.find(1)->second.data.first--;
+  for (int i = 0; i < 50; ++i) {
+    EXPECT_EQ(m.find(i)->second.data.first, i);
+  }
+}
+
+void process_mem_usage(double &vm_usage, double &resident_set) {
+  using std::ifstream;
+  using std::ios_base;
+  using std::string;
+
+  vm_usage = 0.0;
+  resident_set = 0.0;
+
+  // 'file' stat seems to give the most reliable results
+  //
+  ifstream stat_stream("/proc/self/stat", ios_base::in);
+
+  // dummy vars for leading entries in stat that we don't care about
+  //
+  string pid, comm, state, ppid, pgrp, session, tty_nr;
+  string tpgid, flags, minflt, cminflt, majflt, cmajflt;
+  string utime, stime, cutime, cstime, priority, nice;
+  string O, itrealvalue, starttime;
+
+  // the two fields we want
+  //
+  unsigned long vsize;
+  long rss;
+
+  stat_stream >> pid >> comm >> state >> ppid >> pgrp >> session >> tty_nr >>
+      tpgid >> flags >> minflt >> cminflt >> majflt >> cmajflt >> utime >>
+      stime >> cutime >> cstime >> priority >> nice >> O >> itrealvalue >>
+      starttime >> vsize >> rss;  // don't care about the rest
+
+  stat_stream.close();
+
+  long page_size_kb = sysconf(_SC_PAGE_SIZE) /
+                      1024;  // in case x86-64 is configured to use 2MB pages
+  vm_usage = vsize / 1024.0;
+  resident_set = rss * page_size_kb;
+}
+
+struct Counter {
+  Counter() = default;
+  Counter(const Counter &other) {
+    a.store(other.a.load());
+    b.store(other.b.load());
+    c.store(other.c.load());
+  }
+
+  std::atomic_int a{0};
+  std::atomic_int b{0};
+  std::atomic_int c{0};
+};
+
+struct Frame {
+  uintptr_t frame[32];
+};
+
+bool operator==(const Frame &lhs, const Frame &rhs) {
+  return std::equal(lhs.frame, lhs.frame + 32, rhs.frame, rhs.frame + 32);
+}
+struct FrameHash {
+  size_t operator()(const Frame &f) const {
+    size_t res = 0;
+    for (size_t i = 0; i < 32; ++i) {
+      res ^= f.frame[i];
+    }
+    return res;
+  }
+};
+
+// Memory useage overlook
+// VM: 348,332 KB; RSS: 345,676 KB
+TEST(UnorderedInsertMap, memory_occupy) {
+  folly::AtomicUnorderedInsertMap<Frame, MutableData<Counter>, FrameHash> m(
+      1000000);
+  Frame f1;
+  f1.frame[0] = 0x1;
+  f1.frame[1] = 0x2;
+
+  Counter c1;
+  m.emplace(f1, c1);
+
+  double vm, rss;
+  process_mem_usage(vm, rss);
+
+  std::cout << "VM: " << vm << "; RSS: " << rss << std::endl;
+}
+
 TEST(UnorderedInsertMap, value_mutation) {
   UIM<int, MutableData<int>, uint32_t, non_atomic> m(100);
 
@@ -192,8 +287,8 @@ TEST(UnorderedInsertMap, value_mutation) {
 
 // This test is too expensive to run automatically.  On my dev server it
 // takes about 10 minutes for dbg build, 2 for opt.
-TEST(AtomicUnorderedInsertMap, DISABLED_mega_map) {
-  size_t capacity = 2000000000;
+TEST(AtomicUnorderedInsertMap, mega_map) {
+  size_t capacity = 2000000;
   AtomicUnorderedInsertMap64<size_t, size_t> big(capacity);
   for (size_t i = 0; i < capacity * 2; i += 2) {
     big.emplace(i, i * 10);

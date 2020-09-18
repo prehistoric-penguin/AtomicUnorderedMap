@@ -107,7 +107,6 @@ constexpr typename std::make_unsigned<Int>::type to_unsigned(Int value) {
   return static_cast<typename std::make_unsigned<Int>::type>(value);
 }
 
-
 namespace detail {
 template <typename Dst, typename Src>
 constexpr std::make_signed_t<Dst> bits_to_signed(Src const s) {
@@ -119,7 +118,7 @@ constexpr std::make_unsigned_t<Dst> bits_to_unsigned(Src const s) {
   static_assert(std::is_unsigned<Dst>::value, "signed type");
   return static_cast<Dst>(to_unsigned(s));
 }
-} // namespace detail
+}  // namespace detail
 
 /// findFirstSet
 ///
@@ -163,7 +162,6 @@ constexpr std::make_unsigned_t<Dst> bits_to_unsigned(Src const s) {
   static_assert(std::is_unsigned<Dst>::value, "signed type");
   return static_cast<Dst>(to_unsigned(s));
 }
-
 
 /// findLastSet
 ///
@@ -257,4 +255,4 @@ inline constexpr T strictPrevPowTwo(T const v) {
   return v > 1 ? prevPowTwo(T(v - 1)) : T(0);
 }
 
-} // namespace folly
+}  // namespace folly

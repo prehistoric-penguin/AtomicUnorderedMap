@@ -18,12 +18,13 @@
 
 #include <atomic>
 #include <cstdint>
+#include <cstring>
 #include <functional>
 #include <limits>
 #include <stdexcept>
 #include <system_error>
 #include <type_traits>
-#include <cstring>
+#include <random>
 
 //#include <folly/Conv.h>
 //#include <folly/Likely.h>
@@ -140,15 +141,11 @@ using aligned_storage_for_t =
 /// Feel free to override if std::is_trivial_destructor isn't recognizing
 /// the triviality of your destructors.
 template <
-    typename Key,
-    typename Value,
-    typename Hash = std::hash<Key>,
+    typename Key, typename Value, typename Hash = std::hash<Key>,
     typename KeyEqual = std::equal_to<Key>,
-    bool SkipKeyValueDeletion =
-        (std::is_trivially_destructible<Key>::value &&
-         std::is_trivially_destructible<Value>::value),
-    template <typename> class Atom = std::atomic,
-    typename IndexType = uint32_t,
+    bool SkipKeyValueDeletion = (std::is_trivially_destructible<Key>::value &&
+                                 std::is_trivially_destructible<Value>::value),
+    template <typename> class Atom = std::atomic, typename IndexType = uint32_t,
     typename Allocator = folly::detail::MMapAlloc>
 
 struct AtomicUnorderedInsertMap {
@@ -159,25 +156,25 @@ struct AtomicUnorderedInsertMap {
   typedef std::ptrdiff_t difference_type;
   typedef Hash hasher;
   typedef KeyEqual key_equal;
-  typedef const value_type& const_reference;
+  typedef const value_type &const_reference;
 
   typedef struct ConstIterator {
-    ConstIterator(const AtomicUnorderedInsertMap& owner, IndexType slot)
+    ConstIterator(const AtomicUnorderedInsertMap &owner, IndexType slot)
         : owner_(owner), slot_(slot) {}
 
-    ConstIterator(const ConstIterator&) = default;
-    ConstIterator& operator=(const ConstIterator&) = default;
+    ConstIterator(const ConstIterator &) = default;
+    ConstIterator &operator=(const ConstIterator &) = default;
 
-    const value_type& operator*() const {
+    const value_type &operator*() const {
       return owner_.slots_[slot_].keyValue();
     }
 
-    const value_type* operator->() const {
+    const value_type *operator->() const {
       return &owner_.slots_[slot_].keyValue();
     }
 
     // pre-increment
-    const ConstIterator& operator++() {
+    const ConstIterator &operator++() {
       while (slot_ > 0) {
         --slot_;
         if (owner_.slots_[slot_].state() == LINKED) {
@@ -194,15 +191,13 @@ struct AtomicUnorderedInsertMap {
       return prev;
     }
 
-    bool operator==(const ConstIterator& rhs) const {
+    bool operator==(const ConstIterator &rhs) const {
       return slot_ == rhs.slot_;
     }
-    bool operator!=(const ConstIterator& rhs) const {
-      return !(*this == rhs);
-    }
+    bool operator!=(const ConstIterator &rhs) const { return !(*this == rhs); }
 
    private:
-    const AtomicUnorderedInsertMap& owner_;
+    const AtomicUnorderedInsertMap &owner_;
     IndexType slot_;
   } const_iterator;
 
@@ -214,10 +209,8 @@ struct AtomicUnorderedInsertMap {
   /// map approaches 1 the insert performance will suffer.  The capacity
   /// is limited to 2^30 (about a billion) for the default IndexType,
   /// beyond which we will throw invalid_argument.
-  explicit AtomicUnorderedInsertMap(
-      size_t maxSize,
-      float maxLoadFactor = 0.8f,
-      const Allocator& alloc = Allocator())
+  explicit AtomicUnorderedInsertMap(size_t maxSize, float maxLoadFactor = 0.8f,
+                                    const Allocator &alloc = Allocator())
       : allocator_(alloc) {
     size_t capacity = size_t(maxSize / std::min(1.0f, maxLoadFactor) + 128);
     size_t avail = size_t{1} << (8 * sizeof(IndexType) - 2);
@@ -234,7 +227,7 @@ struct AtomicUnorderedInsertMap {
     numSlots_ = capacity;
     slotMask_ = folly::nextPowTwo(capacity * 4) - 1;
     mmapRequested_ = sizeof(Slot) * capacity;
-    slots_ = reinterpret_cast<Slot*>(allocator_.allocate(mmapRequested_));
+    slots_ = reinterpret_cast<Slot *>(allocator_.allocate(mmapRequested_));
     zeroFillSlots();
     // mark the zero-th slot as in-use but not valid, since that happens
     // to be our nil value
@@ -247,7 +240,7 @@ struct AtomicUnorderedInsertMap {
         slots_[i].~Slot();
       }
     }
-    allocator_.deallocate(reinterpret_cast<char*>(slots_), mmapRequested_);
+    allocator_.deallocate(reinterpret_cast<char *>(slots_), mmapRequested_);
   }
 
   /// Searches for the key, returning (iter,false) if it is found.
@@ -270,7 +263,7 @@ struct AtomicUnorderedInsertMap {
   ///    new (raw) std::string(computation(key));
   ///  })->first;
   template <typename Func>
-  std::pair<const_iterator, bool> findOrConstruct(const Key& key, Func&& func) {
+  std::pair<const_iterator, bool> findOrConstruct(const Key &key, Func &&func) {
     auto const slot = keyToSlotIdx(key);
     auto prev = slots_[slot].headAndState_.load(std::memory_order_acquire);
 
@@ -281,7 +274,7 @@ struct AtomicUnorderedInsertMap {
 
     auto idx = allocateNear(slot);
     new (&slots_[idx].keyValue().first) Key(key);
-    func(static_cast<void*>(&slots_[idx].keyValue().second));
+    func(static_cast<void *>(&slots_[idx].keyValue().second));
 
     while (true) {
       slots_[idx].next_ = prev >> 2;
@@ -322,12 +315,12 @@ struct AtomicUnorderedInsertMap {
   /// forms, including a recursive tuple forwarding template
   /// http://functionalcpp.wordpress.com/2013/08/28/tuple-forwarding/).
   template <class K, class V>
-  std::pair<const_iterator, bool> emplace(const K& key, V&& value) {
+  std::pair<const_iterator, bool> emplace(const K &key, V &&value) {
     return findOrConstruct(
-        key, [&](void* raw) { new (raw) Value(std::forward<V>(value)); });
+        key, [&](void *raw) { new (raw) Value(std::forward<V>(value)); });
   }
 
-  const_iterator find(const Key& key) const {
+  const_iterator find(const Key &key) const {
     return ConstIterator(*this, find(key, keyToSlotIdx(key)));
   }
 
@@ -339,13 +332,11 @@ struct AtomicUnorderedInsertMap {
     return ConstIterator(*this, slot);
   }
 
-  const_iterator cend() const {
-    return ConstIterator(*this, 0);
-  }
+  const_iterator cend() const { return ConstIterator(*this, 0); }
 
  private:
   enum : IndexType {
-    kMaxAllocationTries = 1000, // after this we throw
+    kMaxAllocationTries = 1000,  // after this we throw
   };
 
   enum BucketState : IndexType {
@@ -392,14 +383,14 @@ struct AtomicUnorderedInsertMap {
       headAndState_ += (after - before);
     }
 
-    value_type& keyValue() {
+    value_type &keyValue() {
       assert(state() != EMPTY);
-      return *static_cast<value_type*>(static_cast<void*>(&raw_));
+      return *static_cast<value_type *>(static_cast<void *>(&raw_));
     }
 
-    const value_type& keyValue() const {
+    const value_type &keyValue() const {
       assert(state() != EMPTY);
-      return *static_cast<const value_type*>(static_cast<const void*>(&raw_));
+      return *static_cast<const value_type *>(static_cast<const void *>(&raw_));
     }
   };
 
@@ -414,9 +405,9 @@ struct AtomicUnorderedInsertMap {
   size_t slotMask_;
 
   Allocator allocator_;
-  Slot* slots_;
+  Slot *slots_;
 
-  IndexType keyToSlotIdx(const Key& key) const {
+  IndexType keyToSlotIdx(const Key &key) const {
     size_t h = hasher()(key);
     h &= slotMask_;
     while (h >= numSlots_) {
@@ -425,7 +416,7 @@ struct AtomicUnorderedInsertMap {
     return h;
   }
 
-  IndexType find(const Key& key, IndexType slot) const {
+  IndexType find(const Key &key, IndexType slot) const {
     KeyEqual ke = {};
     auto hs = slots_[slot].headAndState_.load(std::memory_order_acquire);
     for (slot = hs >> 2; slot != 0; slot = slots_[slot].next_) {
@@ -451,6 +442,14 @@ struct AtomicUnorderedInsertMap {
     throw std::bad_alloc();
   }
 
+	template <typename INT>
+  static INT random_num(size_t max) {
+    static thread_local std::mt19937 generator;
+    std::uniform_int_distribution<INT> distribution(0, max);
+
+    return distribution(generator);
+  }
+
   /// Returns the slot we should attempt to allocate after tries failed
   /// tries, starting from the specified slot.  This is pulled out so we
   /// can specialize it differently during deterministic testing
@@ -458,15 +457,7 @@ struct AtomicUnorderedInsertMap {
     if (LIKELY(tries < 8 && start + tries < numSlots_)) {
       return IndexType(start + tries);
     } else {
-      IndexType rv;
-      // TODO thread local random
-      if (sizeof(IndexType) <= 4) {
-        rv = IndexType(random() % numSlots_);
-        //rv = IndexType(folly::Random::rand32(numSlots_));
-      } else {
-        rv = IndexType(random() % numSlots_);
-        //rv = IndexType(folly::Random::rand64(numSlots_));
-      }
+      IndexType rv = random_num<IndexType>(numSlots_);
       assert(rv < numSlots_);
       return rv;
     }
@@ -475,7 +466,7 @@ struct AtomicUnorderedInsertMap {
   void zeroFillSlots() {
     using folly::detail::GivesZeroFilledMemory;
     if (!GivesZeroFilledMemory<Allocator>::value) {
-      memset(static_cast<void*>(slots_), 0, mmapRequested_);
+      memset(static_cast<void *>(slots_), 0, mmapRequested_);
     }
   }
 };
@@ -484,25 +475,16 @@ struct AtomicUnorderedInsertMap {
 /// to select a 64 bit slot index type.  Use this if you need a capacity
 /// bigger than 2^30 (about a billion).  This increases memory overheads,
 /// obviously.
-template <
-    typename Key,
-    typename Value,
-    typename Hash = std::hash<Key>,
-    typename KeyEqual = std::equal_to<Key>,
-    bool SkipKeyValueDeletion =
-        (std::is_trivially_destructible<Key>::value &&
-         std::is_trivially_destructible<Value>::value),
-    template <typename> class Atom = std::atomic,
-    typename Allocator = folly::detail::MMapAlloc>
-using AtomicUnorderedInsertMap64 = AtomicUnorderedInsertMap<
-    Key,
-    Value,
-    Hash,
-    KeyEqual,
-    SkipKeyValueDeletion,
-    Atom,
-    uint64_t,
-    Allocator>;
+template <typename Key, typename Value, typename Hash = std::hash<Key>,
+          typename KeyEqual = std::equal_to<Key>,
+          bool SkipKeyValueDeletion =
+              (std::is_trivially_destructible<Key>::value &&
+               std::is_trivially_destructible<Value>::value),
+          template <typename> class Atom = std::atomic,
+          typename Allocator = folly::detail::MMapAlloc>
+using AtomicUnorderedInsertMap64 =
+    AtomicUnorderedInsertMap<Key, Value, Hash, KeyEqual, SkipKeyValueDeletion,
+                             Atom, uint64_t, Allocator>;
 
 /// MutableAtom is a tiny wrapper than gives you the option of atomically
 /// updating values inserted into an AtomicUnorderedInsertMap<K,
@@ -512,7 +494,7 @@ template <typename T, template <typename> class Atom = std::atomic>
 struct MutableAtom {
   mutable Atom<T> data;
 
-  explicit MutableAtom(const T& init) : data(init) {}
+  explicit MutableAtom(const T &init) : data(init) {}
 };
 
 /// MutableData is a tiny wrapper than gives you the option of using an
@@ -521,7 +503,7 @@ struct MutableAtom {
 template <typename T>
 struct MutableData {
   mutable T data;
-  explicit MutableData(const T& init) : data(init) {}
+  explicit MutableData(const T &init) : data(init) {}
 };
 
-} // namespace folly
+}  // namespace folly
