@@ -26,6 +26,10 @@
 #include <type_traits>
 #include <random>
 
+#ifndef ATOMIC_INSERT_MAP_SIZE
+#define ATOMIC_INSERT_MAP_SIZE 100
+#endif
+
 //#include <folly/Conv.h>
 //#include <folly/Likely.h>
 //#include <folly/Random.h>
@@ -202,7 +206,8 @@ struct AtomicUnorderedInsertMap {
   } const_iterator;
 
   friend ConstIterator;
-
+  AtomicUnorderedInsertMap()
+    : AtomicUnorderedInsertMap(ATOMIC_INSERT_MAP_SIZE) {}
   /// Constructs a map that will support the insertion of maxSize key-value
   /// pairs without exceeding the max load factor.  Load factors of greater
   /// than 1 are not supported, and once the actual load factor of the
