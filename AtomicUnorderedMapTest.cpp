@@ -285,12 +285,16 @@ TEST(UnorderedInsertMap, memory_occupy) {
 TEST(UnorderedInsertMap, value_mutation) {
   UIM<int, MutableData<int>, uint32_t, non_atomic> m(100);
 
-  for (int i = 0; i < 50; ++i) {
+  for (int i = 1; i < 50; ++i) {
     m.emplace(i, i);
   }
 
   m.find(1)->second.data++;
   EXPECT_EQ(m.find(1)->second.data, 2);
+
+  for (auto itr = m.cbegin(); itr != m.cend(); ++itr) {
+    EXPECT_NE(itr->second.data, 0);
+  }
 }
 
 // This test is too expensive to run automatically.  On my dev server it
