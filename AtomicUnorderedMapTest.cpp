@@ -269,6 +269,13 @@ TEST(UnorderedInsertMap, memory_occupy) {
   Counter c1;
   m.emplace(f1, c1);
 
+  auto itr = m.find(f1);
+  EXPECT_NE(itr, m.cend());
+  itr->second.data.a++;
+
+  m.emplace(f1, c1);
+  itr->second.data.a++;
+  EXPECT_EQ(m.find(f1)->second.data.a, 2);
   double vm, rss;
   process_mem_usage(vm, rss);
 
